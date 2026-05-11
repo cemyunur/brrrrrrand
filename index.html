@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Karanlık Takip - TEST MODU</title>
+    <style>
+        body { margin: 0; background-color: #050505; display: flex; justify-content: center; align-items: center; height: 100vh; color: #fff; font-family: 'Courier New', Courier, monospace; flex-direction: column; overflow: hidden; }
+        #gameContainer { position: relative; }
+        canvas { background-color: #111; border: 2px solid #555; max-width: 100%; max-height: 90vh; }
+        #ui { position: absolute; top: 10px; left: 10px; font-size: 18px; font-weight: bold; color: #fff; z-index: 10; }
+        #startScreen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.9); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 20; }
+        #startBtn { padding: 20px 40px; font-size: 24px; font-family: 'Courier New', Courier, monospace; background-color: #4CAF50; color: #fff; border: none; cursor: pointer; font-weight: bold; border-radius: 10px; }
+        #errorLog { color: yellow; font-size: 12px; margin-top: 20px; text-align: center; }
+    </style>
+</head>
+<body>
+
+    <div id="gameContainer">
+        <div id="ui">SKOR: <span id="score">0</span></div>
+        <div id="startScreen">
+            <h2 style="color: red; margin-bottom: 30px; text-align: center;">TEST MODU<br>(Dosyasız Sürüm)</h2>
+            <button id="startBtn">OYUNU BAŞLAT</button>
+            <div id="errorLog">Eğer buton çalışmıyorsa burada hata yazacaktır.</div>
+        </div>
+        <canvas id="gameCanvas" width="400" height="600"></canvas>
+    </div>
+
+    <script>
+        // HATA YAKALAYICI (Ekrana yazdırır)
+        window.onerror = function(msg, url, line, col, error) {
+            document.getElementById("errorLog").innerHTML += "<br>HATA: " + msg;
+            return false;
+        };
+
+        try {
+            const canvas = document.getElementById("gameCanvas");
+            const ctx = canvas.getContext("2d");
+
+            // DEĞİŞKENLER
+            const VPx = canvas.width / 2; const VPy = 200; const maxDepth = 100;         
+            let score = 0; let gameActive = false; let roadOffset = 0;
+            let player = { x: 0, depth: 15, speed: 7 }; 
+            let monsterDepth = 90; let obstacles = []; let frameCount = 0;
+            let phones = []; 
+            let gameStartTime = 0;
+
+            let keys = { ArrowLeft: false, ArrowRight: false };
+            window.addEventListener("keydown", (e) => { if(keys[e.code] !== undefined) keys[e.code] = true; });
+            window.addEventListener("keyup", (e) => { if(keys[e.code] !== undefined) keys[e.code] = false; });
+
+            function handleInputStart(clientX, clientY) {
+                let rect = canvas.getBoundingClientRect();
+                let x = (clientX - rect.left) * (canvas.width / rect.width);
+                let y = (clientY - rect.top) * (canvas.height / rect.height);
+                let clickedOnPhone = false;
+                
+                for (let i = phones.length - 1; i >= 0; i--) {
+                    let p = phones[i];
+                    if (x > p.x && x < p.x + p.w && y > p.y && y < p.y + p.h) {
+                        p.clicks++; 
+                        if (p.clicks >= 2) { phones.splice(i, 1); score += 50; }
+                        clickedOnPhone = true; break;
+                    }
+                }
+                if (clickedOnPhone) return;
+                
+                if (x < canvas.width / 2) { keys.ArrowLeft = true; keys.ArrowRight = false; }
+                else { keys.ArrowRight = true; keys.ArrowLeft = false; }
+            }
+
+            canvas.addEventListener("mousedown", (e) => handleInputStart(e.clientX, e.clientY));
+            canvas.addEventListener("touchstart", (e) => {
+                e.preventDefault(); // Mobil kaymayı engeller
+                handleInputStart(e.touches[0].clientX, e.touches[0].clientY);
+            }, {passive: false});
+
+            window.addEventListener("mouseup", () => { keys.ArrowLeft = false; keys.ArrowRight = false; });
+            window.addEventListener("touchend", () => { keys.ArrowLeft = false; keys.ArrowRight = false; });
+
+            // BAŞLATMA BUTONU
+            let btn = document.getElementById("startBtn");
+            
+            function startGame() {
+                document.getElementById("startScreen").style.display = "none";
+                gameActive = true;
+                gameStartTime = Date.now();
+                gameLoop();
+            }
+
+            btn.addEventListener("click", startGame);
+            btn.addEventListener("touchstart", (e) => { e.preventDefault(); startGame(); }, {passive: false});
+
+            function project(x, depth) {
+                let ratio = 1 - (depth / maxDepth);
+                let scale = ratio * ratio; 
+                return { x: VPx + (x * scale), y: VPy + (canvas.height - VPy) * scale, scale: scale };
+            }
+
+            function spawnObstacle() {
+                let lanes = [-150, 0, 150]; 
+                obstacles.push({ x: lanes[Math.floor(Math.random() * lanes.length)], depth: -45, passed: false });
+            }
+
+            function update() {
+                if (!gameActive) return;
+                let diff = 1 + (Math.floor(score / 200) * 0.05);
+                
+                if (keys.ArrowLeft && player.x > -180) player.x -= player.speed;
+                if (keys.ArrowRight && player.x < 180) player.x += player.speed;
+                
+                roadOffset += 1.2 * diff; 
+                if (roadOffset > 10) roadOffset -= 10;
+                
+                frameCount++;
+                if (frameCount % Math.max(25, Math.floor(60 / diff)) === 0) spawnObstacle();
+
+                let timeElapsed = (Date.now() - gameStartTime) / 1000;
+                if (timeElapsed > 3 && Math.random() < 0.002) { 
+                    phones.push({
+                        x: Math.random() * (canvas.width - 130), y: 40 + Math.random() * (canvas.height - 300),
+                        w: 120, h: 220, clicks: 0
+                    });
+                }
+
+                for (let i = 0; i < obstacles.length; i++) {
+                    let obs = obstacles[i]; obs.depth += 1.1 * diff; 
+                    
+                    if (Math.abs(obs.depth - player.depth) < 5 && Math.abs(obs.x - player.x) < 40 && !obs.passed) { 
+                        obs.passed = true; monsterDepth -= 15; 
+                    }
+                    if (obs.depth > player.depth + 5 && !obs.passed) { 
+                        obs.passed = true; score += 10; document.getElementById("score").innerText = score; 
+                    }
+                    if (obs.depth >= maxDepth) { obstacles.splice(i, 1); i--; }
+                }
+
+                if (monsterDepth <= player.depth + 5) {
+                    gameActive = false; 
+                    setTimeout(() => alert("YAKALANDIN!\nSkor: " + score + "\nYeniden oynamak için sayfayı yenile."), 100);
+                }
+            }
+
+            function draw() {
+                let danger = 1 - (Math.max(0, monsterDepth - player.depth) / 75);
+                ctx.fillStyle = `rgb(${Math.floor(danger * 80)}, 0, 0)`; ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5; ctx.beginPath();
+                ctx.moveTo(0, VPy); ctx.lineTo(canvas.width, VPy); ctx.stroke();
+
+                for (let d = roadOffset; d < maxDepth; d += 10) {
+                    let p1 = project(-350, d); let p2 = project(350, d);
+                    ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+                }
+
+                let mP = project(0, monsterDepth);
+                let mSize = 400 * mP.scale; let mHeight = 400 * mP.scale; 
+                let kX = mP.x - mSize/2; let kY = mP.y - mHeight * 0.8;
+
+                // KOVALAYAN (Kırmızı Kutu)
+                ctx.fillStyle = "darkred";
+                ctx.fillRect(kX, kY, mSize, mHeight);
+                ctx.fillStyle = "#fff"; ctx.font = "20px Arial"; ctx.fillText("YARATIK", kX + mSize/2 - 40, kY + mHeight/2);
+
+                // ENGELLER (Sarı Kutular)
+                obstacles.forEach(obs => {
+                    if (obs.depth > 0) {
+                        let oP = project(obs.x, obs.depth);
+                        let oSize = 80 * oP.scale; 
+                        ctx.fillStyle = "orange";
+                        ctx.fillRect(oP.x - oSize/2, oP.y - oSize, oSize, oSize);
+                    }
+                });
+
+                // OYUNCU (Mavi Kutu)
+                let pP = project(player.x, player.depth);
+                let pW = 80 * pP.scale; let pH = 80 * pP.scale;
+                ctx.fillStyle = "dodgerblue"; 
+                ctx.fillRect(pP.x - pW/2, pP.y - pH + (10*pP.scale), pW, pH);
+
+                // TELEFONLAR
+                phones.forEach(p => {
+                    ctx.fillStyle = "#222"; ctx.fillRect(p.x, p.y, p.w, p.h);
+                    ctx.strokeStyle = "#666"; ctx.lineWidth = 3; ctx.strokeRect(p.x, p.y, p.w, p.h);
+                    
+                    let sX = p.x + 5, sY = p.y + 20, sW = p.w - 10, sH = p.h - 25;
+                    ctx.fillStyle = "#333"; ctx.fillRect(sX, sY, sW, sH - 45);
+                    ctx.fillStyle = "#fff"; ctx.font = "12px sans-serif"; ctx.textAlign = "center"; 
+                    ctx.fillText("GÖNDERİ", sX + sW/2, sY + (sH-45)/2);
+                    
+                    let bY = sY + sH - 40;
+                    let bCol = p.clicks === 1 ? "#ff0" : "#fff";
+                    ctx.strokeStyle = bCol; ctx.strokeRect(sX + 5, bY, sW - 10, 35);
+                    if (p.clicks === 1 && frameCount % 10 < 5) { ctx.fillStyle = bCol; ctx.fillRect(sX + 5, bY, sW - 10, 35); }
+                    
+                    ctx.fillStyle = (p.clicks === 1 && frameCount % 10 < 5) ? "#000" : bCol;
+                    ctx.font = "bold 14px 'Courier New'"; ctx.textAlign = "center"; 
+                    ctx.fillText(p.clicks === 0 ? "LIKE <3" : "1 DAHA!", sX + sW/2, bY + 22);
+                });
+            }
+
+            function gameLoop() { update(); draw(); if(gameActive) requestAnimationFrame(gameLoop); }
+        } catch(e) {
+            document.getElementById("errorLog").innerHTML += "<br>Kritik Hata: " + e.message;
+        }
+    </script>
+</body>
+</html>
