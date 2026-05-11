@@ -47,6 +47,9 @@
         let monsterDepth = 90; let obstacles = []; let frameCount = 0;
         let phones = []; 
         let gameStartTime = 0;
+        
+        // YENİ: Kasmayan sarsıntı için kamera değişkeni
+        let screenShake = 0; 
 
         let keys = { ArrowLeft: false, ArrowRight: false };
         window.addEventListener("keydown", (e) => { if(keys[e.code] !== undefined) keys[e.code] = true; });
@@ -65,7 +68,6 @@
                     if (p.clicks >= 2) { 
                         phones.splice(i, 1); 
                         score += 50; 
-                        // BEĞENİ GÜCÜ: Yaratığı 10 birim geriye savur! (Sınır 90)
                         monsterDepth = Math.min(90, monsterDepth + 10);
                     }
                     clickedOnPhone = true; break;
@@ -114,7 +116,9 @@
             frameCount++;
             if (frameCount % Math.max(25, Math.floor(60 / diff)) === 0) spawnObstacle();
 
-            // İlk 3 saniyeden sonra rastgele telefonlar
+            // Sarsıntı süresini azalt
+            if (screenShake > 0) screenShake--;
+
             let timeElapsed = (Date.now() - gameStartTime) / 1000;
             if (timeElapsed > 3 && Math.random() < 0.002) { 
                 phones.push({ x: Math.random() * (canvas.width - 130), y: 40 + Math.random() * (canvas.height - 300), w: 120, h: 220, clicks: 0, imgIndex: Math.floor(Math.random() * 10) });
@@ -123,17 +127,16 @@
             for (let i = 0; i < obstacles.length; i++) {
                 let obs = obstacles[i]; obs.depth += 1.1 * diff; 
                 
-                // Hitbox ayarlaması (Genişletilmiş objelere göre)
                 if (Math.abs(obs.depth - player.depth) < 6 && Math.abs(obs.x - player.x) < 50 && !obs.passed) { 
-                    obs.passed = true; monsterDepth -= 15; 
-                    canvas.style.transform = `translate(${Math.random()*10-5}px, ${Math.random()*10-5}px)`;
-                    setTimeout(() => canvas.style.transform = "translate(0,0)", 100);
+                    obs.passed = true; 
+                    monsterDepth -= 15; 
+                    // YENİ: CSS yerine Canvas içi sarsıntıyı tetikle
+                    screenShake = 12; 
                 }
                 if (obs.depth > player.depth + 5 && !obs.passed) { obs.passed = true; score += 10; document.getElementById("score").innerText = score; }
                 if (obs.depth >= maxDepth) { obstacles.splice(i, 1); i--; }
             }
 
-            // SES EFEKTİ BOZULMASI (Glitch & Stutter)
             if (karakterSesi) {
                 try {
                     let danger = 1 - (Math.max(0, monsterDepth - player.depth) / 75);
@@ -159,7 +162,17 @@
 
         function draw() {
             let danger = 1 - (Math.max(0, monsterDepth - player.depth) / 75);
-            ctx.fillStyle = `rgb(${Math.floor(danger * 80)}, 0, 0)`; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = `rgb(${Math.floor(danger * 80)}, 0, 0)`; 
+            // Arka planı her zaman tam çiz ki sarsıntıda kenarlar siyah boşluk kalmasın
+            ctx.fillRect(-20, -20, canvas.width + 40, canvas.height + 40); 
+
+            ctx.save(); // Kameranın normal halini kaydet
+            
+            // Eğer sarsıntı varsa kamerayı rastgele titret
+            if (screenShake > 0) {
+                ctx.translate(Math.random() * 10 - 5, Math.random() * 10 - 5);
+            }
+
             ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5; ctx.beginPath();
             ctx.moveTo(0, VPy); ctx.lineTo(canvas.width, VPy); ctx.stroke();
 
@@ -172,9 +185,8 @@
             let mSize = 400 * mP.scale; let mHeight = 400 * mP.scale; 
             let kX = mP.x - mSize/2; let kY = mP.y - mHeight * 0.8;
 
-            // 1. OPTİMİZE EDİLMİŞ SAF SİYAH GLITCH AURA (Kasma Yapmaz!)
             if (danger > 0.05) {
-                ctx.fillStyle = "#000"; // Şeffaflık iptal! Overdraw tamamen bitti.
+                ctx.fillStyle = "#000"; 
                 let pCount = Math.floor(25 * danger) + 10; 
                 
                 for(let p = 0; p < pCount; p++) {
@@ -184,21 +196,17 @@
                     let pY = kY + mHeight/2 + offsetY;
                     
                     let pR = (Math.random() * 80 + 30) * mP.scale;
-                    
-                    // Boyut Limiti: Devasa piksellerin telefonu dondurmasını önler
                     if (pR > 120) pR = 120; 
                     
                     ctx.fillRect(pX - pR/2, pY - pR/2, pR, pR);
                 }
             }
 
-            // 2. KOVALAYAN YARATIK
             if (karakterResmi.complete && karakterResmi.naturalWidth !== 0) {
                 let sX = (Math.random()*4-2)*danger; let sY = (Math.random()*4-2)*danger;
                 ctx.drawImage(karakterResmi, kX + sX, kY + sY, mSize, mHeight);
             }
 
-            // ENGELLER (Boyutu 110 olarak ayarlandı)
             obstacles.forEach(obs => {
                 if (obs.depth < 0) {
                     if (frameCount % 16 < 8) { 
@@ -216,7 +224,6 @@
                 }
             });
 
-            // OYUNCU KARAKTER (Boyutu 140 olarak devleştirildi)
             let pP = project(player.x, player.depth);
             let pW = 140 * pP.scale; let pH = 140 * pP.scale;
             if (kosanResmi.complete && kosanResmi.naturalWidth !== 0) {
@@ -225,7 +232,6 @@
                 ctx.fillStyle = "#fff"; ctx.fillRect(pP.x - pW/2, pP.y - pH + (15*pP.scale), pW, pH);
             }
 
-            // TELEFONLAR
             phones.forEach(p => {
                 ctx.fillStyle = "#222"; ctx.fillRect(p.x, p.y, p.w, p.h);
                 ctx.strokeStyle = "#666"; ctx.lineWidth = 3; ctx.strokeRect(p.x, p.y, p.w, p.h);
@@ -250,6 +256,8 @@
                 ctx.font = "bold 14px 'Courier New'"; ctx.textAlign = "center"; 
                 ctx.fillText(p.clicks === 0 ? "LIKE <3" : "1 DAHA!", sX + sW/2, bY + 22);
             });
+
+            ctx.restore(); // Kamerayı eski düz haline getir
         }
 
         function gameLoop() { update(); draw(); if(gameActive) requestAnimationFrame(gameLoop); }
