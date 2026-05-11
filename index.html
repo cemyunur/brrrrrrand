@@ -5,262 +5,784 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>bRrand</title>
     <style>
-        body { margin: 0; background-color: #050505; display: flex; justify-content: center; align-items: center; height: 100vh; color: #fff; font-family: 'Courier New', Courier, monospace; flex-direction: column; touch-action: none; overflow: hidden; }
-        #gameContainer { position: relative; }
-        canvas { background-color: #000; border: 2px solid #555; image-rendering: pixelated; max-width: 100%; max-height: 90vh; box-shadow: 0 0 30px rgba(255, 0, 0, 0.1); }
-        #ui { position: absolute; top: 10px; left: 10px; font-size: 18px; font-weight: bold; color: #fff; z-index: 10; text-shadow: 2px 2px 0 #000; }
-        #startScreen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.85); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 20; }
-        #startBtn { padding: 15px 30px; font-size: 24px; font-family: 'Courier New', Courier, monospace; background-color: #fff; color: #000; border: none; cursor: pointer; font-weight: bold; }
+        * { box-sizing: border-box; }
+        body { margin: 0; background-color: #050505; display: flex; justify-content: center; align-items: center; height: 100vh; color: #fff; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; flex-direction: column; touch-action: none; overflow: hidden; }
+        #gameContainer { position: relative; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
+        canvas { background-color: #000; border: 2px solid #333; image-rendering: pixelated; box-shadow: 0 0 40px rgba(255,0,0,0.15); }
+
+        #ui {
+            position: absolute; top: 10px; width: 380px;
+            display: flex; justify-content: space-between;
+            font-size: 16px; font-weight: bold; z-index: 10;
+            text-shadow: 2px 2px 0 #000; pointer-events: none;
+            padding: 0 8px;
+        }
+        #levelBadge {
+            font-size: 13px; color: #ff4444; font-weight: 800;
+            letter-spacing: 1px; text-shadow: 0 0 8px rgba(255,0,0,0.6);
+        }
+
+        #powerPanel {
+            position: absolute;
+            right: 0px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 12;
+            pointer-events: all;
+            padding: 6px 4px;
+        }
+        .powerBtn {
+            width: 44px; height: 44px;
+            background: rgba(0,0,0,0.75);
+            border: 1.5px solid rgba(255,255,255,0.15);
+            border-radius: 10px;
+            cursor: pointer;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            transition: border-color 0.15s, background 0.15s;
+            position: relative;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .powerBtn.ready   { border-color: rgba(255,255,255,0.5); }
+        .powerBtn.active  { border-color: #fff; background: rgba(255,255,255,0.12); }
+        .powerBtn.cooldown{ border-color: rgba(255,255,255,0.1); opacity: 0.55; }
+        .powerBtn canvas  { border: none; box-shadow: none; background: transparent; }
+        .powerCooldownBar {
+            position: absolute; bottom: 0; left: 0; height: 3px;
+            background: rgba(255,255,255,0.5); border-radius: 0 0 8px 8px;
+            transition: width 0.05s linear;
+        }
+
+        #startScreen, #gameOverScreen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #000;
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            z-index: 20; text-align: center;
+            overflow: hidden;
+        }
+        #startCanvas, #goCanvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; box-shadow: none; }
+
+        .screenContent { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; }
+        .gameTitle { color: #ff0000; font-size: 52px; font-weight: 800; letter-spacing: -1px; margin-bottom: 6px; text-shadow: 0 0 30px rgba(255,0,0,0.5); }
+        .gameSubtitle { color: #888; font-size: 14px; max-width: 280px; line-height: 1.7; margin-bottom: 10px; }
+        .controlsHint { color: #444; font-size: 12px; margin-bottom: 28px; }
+        .powerHint { color: #333; font-size: 11px; margin-bottom: 20px; line-height: 1.8; }
+
+        .hidden { display: none !important; }
+        button {
+            padding: 14px 36px; font-size: 18px; font-family: inherit;
+            background: #fff; color: #000; border: none; cursor: pointer;
+            font-weight: 800; letter-spacing: 1px;
+            transition: background 0.15s, color 0.15s;
+        }
+        button:hover { background: #ff0000; color: #fff; }
+
+        #vignette { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; transition: box-shadow 0.15s; z-index: 15; }
+
+        #breathOverlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            display: flex; align-items: center; justify-content: center;
+            z-index: 16; opacity: 0; transition: opacity 0.5s;
+        }
+        #breathOverlay.visible { opacity: 1; }
+        #breathText {
+            font-size: 26px; font-weight: 800; color: rgba(255,255,255,0.7);
+            letter-spacing: 4px; text-shadow: 0 0 20px rgba(255,255,255,0.4);
+        }
+
+        #levelBanner {
+            position: absolute; top: 52px; left: 50%; transform: translateX(-50%);
+            color: #ff4444; font-size: 18px; font-weight: 800;
+            text-shadow: 0 0 15px rgba(255,0,0,0.8);
+            letter-spacing: 2px; pointer-events: none; z-index: 17;
+            opacity: 0; transition: opacity 0.4s; white-space: nowrap;
+        }
+        #levelBanner.show { opacity: 1; }
+
+        .goTitle { color: #ff0000; font-size: 38px; font-weight: 800; margin-bottom: 6px; }
+        .goStats { font-size: 20px; margin-bottom: 8px; line-height: 1.8; color: #ccc; }
+        .goLevel { color: #ff6666; font-size: 13px; letter-spacing: 1px; margin-bottom: 24px; }
     </style>
 </head>
 <body>
-
-    <div id="gameContainer">
-        <div id="ui">SKOR: <span id="score">0</span></div>
-        <div id="startScreen">
-            <h2 style="color: red; margin-bottom: 30px; text-align: center; font-size: 36px; letter-spacing: 4px;">bRrand<br><br><span style="font-size:16px; color:#fff; letter-spacing: 1px;">(ARKANA BAKMA...)</span></h2>
-            <button id="startBtn">KAÇIŞI BAŞLAT</button>
-        </div>
-        <canvas id="gameCanvas" width="400" height="600"></canvas>
+<div id="gameContainer">
+    <div id="ui">
+        <div>MESAFE: <span id="distance">0</span>m</div>
+        <div id="levelBadge">SEVİYE 1</div>
+        <div>EN İYİ: <span id="highScoreText">0</span>m</div>
     </div>
 
-    <script>
-        const canvas = document.getElementById("gameCanvas");
-        const ctx = canvas.getContext("2d");
+    <div id="vignette"></div>
+    <div id="breathOverlay"><div id="breathText">NEFES AL...</div></div>
+    <div id="levelBanner">⚡ SEVİYE 2 ⚡</div>
 
-        // GÖRSELLERİ YÜKLE
-        const karakterResmi = new Image(); karakterResmi.src = 'karakter.png'; 
-        const kosanResmi = new Image(); kosanResmi.src = 'kosan.png';
+    <div id="powerPanel">
+        <div class="powerBtn ready" id="btn0">
+            <canvas id="ic0" width="30" height="30"></canvas>
+            <div class="powerCooldownBar" id="bar0" style="width:100%"></div>
+        </div>
+        <div class="powerBtn ready" id="btn1">
+            <canvas id="ic1" width="30" height="30"></canvas>
+            <div class="powerCooldownBar" id="bar1" style="width:100%"></div>
+        </div>
+        <div class="powerBtn ready" id="btn2">
+            <canvas id="ic2" width="30" height="30"></canvas>
+            <div class="powerCooldownBar" id="bar2" style="width:100%"></div>
+        </div>
+    </div>
 
-        const engelResimleri = [];
-        for(let i=1; i<=4; i++) { let img = new Image(); img.src = `engel_${i}.png`; engelResimleri.push(img); }
+    <div id="startScreen">
+        <canvas id="startCanvas"></canvas>
+        <div class="screenContent">
+            <div class="gameTitle">bRrand</div>
+            <div class="gameSubtitle">Sosyal medyanın peşinden kaç.<br>Bildirimleri ❤️ ile temizle, hayatta kal.</div>
+            <div class="controlsHint">← → hareket &nbsp;|&nbsp; 1 / 2 / 3 güçler</div>
+            <div class="powerHint">
+                👻 Geri Yolla &nbsp; ⚡ Hız Patlaması &nbsp; 🛡 Kalkan
+            </div>
+            <button id="startBtn">KAÇIŞI BAŞLAT</button>
+        </div>
+    </div>
 
-        const telefonResimleri = [];
-        for(let i=1; i<=10; i++) { let img = new Image(); img.src = `telefon_${i}.png`; telefonResimleri.push(img); }
+    <div id="gameOverScreen" class="hidden">
+        <canvas id="goCanvas"></canvas>
+        <div class="screenContent">
+            <div class="goTitle">YAKALANDIN</div>
+            <div class="goStats">
+                Mesafe: <span id="finalDistance">0</span>m<br>
+                En İyi: <span id="bestDistance">0</span>m
+            </div>
+            <div class="goLevel" id="goLevel">SEVİYE 1'de yakalandın</div>
+            <button id="restartBtn">YENİDEN DENE</button>
+        </div>
+    </div>
 
-        let karakterSesi = null;
-        try { karakterSesi = new Audio('ses.mp3'); karakterSesi.loop = true; } catch(e) {}
+    <canvas id="gameCanvas" width="400" height="600"></canvas>
+</div>
 
-        const VPx = canvas.width / 2; const VPy = 200; const maxDepth = 100;         
-        let score = 0; let gameActive = false; let roadOffset = 0;
-        let player = { x: 0, depth: 15, speed: 7 }; 
-        let monsterDepth = 90; let obstacles = []; let frameCount = 0;
-        let phones = []; 
-        let gameStartTime = 0;
-        
-        // YENİ: Kasmayan sarsıntı için kamera değişkeni
-        let screenShake = 0; 
+<script>
+// ─── CANVAS & CTX ────────────────────────────────────────────
+const canvas = document.getElementById("gameCanvas");
+const ctx    = canvas.getContext("2d");
+const vignette      = document.getElementById("vignette");
+const breathOverlay = document.getElementById("breathOverlay");
+const levelBanner   = document.getElementById("levelBanner");
 
-        let keys = { ArrowLeft: false, ArrowRight: false };
-        window.addEventListener("keydown", (e) => { if(keys[e.code] !== undefined) keys[e.code] = true; });
-        window.addEventListener("keyup", (e) => { if(keys[e.code] !== undefined) keys[e.code] = false; });
+// ─── GÖRSELLER ───────────────────────────────────────────────
+const karakterResmi = new Image(); karakterResmi.src = 'karakter.png';
+const kosanResmi    = new Image(); kosanResmi.src    = 'kosan.png';
+const engelResimleri = [];
+for(let i=1;i<=4;i++){const img=new Image();img.src=`engel_${i}.png`;engelResimleri.push(img);}
+const telefonResimleri = [];
+for(let i=1;i<=10;i++){const img=new Image();img.src=`telefon_${i}.png`;telefonResimleri.push(img);}
 
-        function handleInputStart(clientX, clientY) {
-            let rect = canvas.getBoundingClientRect();
-            let x = (clientX - rect.left) * (canvas.width / rect.width);
-            let y = (clientY - rect.top) * (canvas.height / rect.height);
-            let clickedOnPhone = false;
-            
-            for (let i = phones.length - 1; i >= 0; i--) {
-                let p = phones[i];
-                if (x > p.x && x < p.x + p.w && y > p.y && y < p.y + p.h) {
-                    p.clicks++; 
-                    if (p.clicks >= 2) { 
-                        phones.splice(i, 1); 
-                        score += 50; 
-                        monsterDepth = Math.min(90, monsterDepth + 10);
-                    }
-                    clickedOnPhone = true; break;
-                }
-            }
-            if (clickedOnPhone) return;
-            if (x < canvas.width / 2) { keys.ArrowLeft = true; keys.ArrowRight = false; }
-            else { keys.ArrowRight = true; keys.ArrowLeft = false; }
-        }
+// ─── SES ─────────────────────────────────────────────────────
+let karakterSesi = null;
+try{karakterSesi=new Audio('ses.mp3');karakterSesi.loop=true;}catch(e){}
 
-        canvas.addEventListener("mousedown", (e) => handleInputStart(e.clientX, e.clientY));
-        canvas.addEventListener("touchstart", (e) => { e.preventDefault(); handleInputStart(e.touches[0].clientX, e.touches[0].clientY); }, {passive: false});
-        window.addEventListener("mouseup", () => { keys.ArrowLeft = false; keys.ArrowRight = false; });
-        window.addEventListener("touchend", () => { keys.ArrowLeft = false; keys.ArrowRight = false; });
+function playSfx(freq,type,duration,vol,freqEnd){
+    try{
+        const a=new(window.AudioContext||window.webkitAudioContext)();
+        const o=a.createOscillator(),g=a.createGain();
+        o.type=type;
+        o.frequency.setValueAtTime(freq,a.currentTime);
+        if(freqEnd)o.frequency.exponentialRampToValueAtTime(freqEnd,a.currentTime+duration);
+        g.gain.setValueAtTime(vol,a.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.01,a.currentTime+duration);
+        o.connect(g);g.connect(a.destination);
+        o.start();o.stop(a.currentTime+duration);
+    }catch(e){}
+}
 
-        document.getElementById("startBtn").addEventListener("click", () => {
-            document.getElementById("startScreen").style.display = "none";
-            try {
-                if (karakterSesi) { karakterSesi.volume = 0.1; let p = karakterSesi.play(); if(p) p.catch(e=>{}); }
-            } catch(e) {}
-            gameActive = true;
-            gameStartTime = Date.now();
-            gameLoop();
+// ─── SABITLER ────────────────────────────────────────────────
+const VPx=canvas.width/2, VPy=200, maxDepth=100;
+const laneX=[-150,0,150];
+
+// ─── OYUN STATE ──────────────────────────────────────────────
+let gameActive=false, score=0, frameCount=0, lastTimestamp=0, gameStartTime=0;
+let highScore=parseInt(localStorage.getItem('bRrand_highScore'))||0;
+let playerLane=1;
+let player={x:0,depth:15};
+let monsterDepth=90, roadOffset=0, screenShake=0, stepCycle=0;
+let obstacles=[], phones=[];
+let currentLevel=1;
+
+// NEFES AL
+let breathPhase=false, breathTimer=0, nextBreathAt=3000;
+const BREATH_INTERVAL=3000, BREATH_DURATION=4000;
+
+// GÜÇLER
+const POWER_MAXCD  =[18000,12000,15000];
+const POWER_MAXTIME=[0,    3000, 5000 ];
+let powers=[{cd:0,active:false,timer:0},{cd:0,active:false,timer:0},{cd:0,active:false,timer:0}];
+let shieldActive=false, shieldTimer=0;
+let boostActive=false,  boostTimer=0;
+
+document.getElementById("highScoreText").innerText=highScore;
+
+// ─── İKONLARI ÇİZ ───────────────────────────────────────────
+function drawIcons(){
+    // İkon 0: Hayalet + geri ok
+    (()=>{
+        const ic=document.getElementById("ic0").getContext("2d");
+        ic.clearRect(0,0,30,30);
+        ic.fillStyle="#ff5555";
+        ic.beginPath();
+        ic.arc(15,10,7,Math.PI,0);
+        ic.lineTo(22,20);ic.lineTo(19,17);ic.lineTo(15,20);ic.lineTo(11,17);ic.lineTo(8,20);
+        ic.closePath();ic.fill();
+        // Gözler
+        ic.fillStyle="#000";
+        ic.beginPath();ic.arc(12,9,1.5,0,Math.PI*2);ic.fill();
+        ic.beginPath();ic.arc(18,9,1.5,0,Math.PI*2);ic.fill();
+        // Ok geri
+        ic.strokeStyle="#fff";ic.lineWidth=2;ic.lineCap="round";
+        ic.beginPath();ic.moveTo(22,25);ic.lineTo(8,25);ic.stroke();
+        ic.beginPath();ic.moveTo(8,25);ic.lineTo(13,21);ic.stroke();
+        ic.beginPath();ic.moveTo(8,25);ic.lineTo(13,29);ic.stroke();
+    })();
+    // İkon 1: Şimşek
+    (()=>{
+        const ic=document.getElementById("ic1").getContext("2d");
+        ic.clearRect(0,0,30,30);
+        ic.fillStyle="#ffcc00";
+        ic.beginPath();
+        ic.moveTo(18,2);ic.lineTo(10,14);ic.lineTo(16,14);ic.lineTo(9,28);ic.lineTo(22,13);ic.lineTo(15,13);
+        ic.closePath();ic.fill();
+        ic.strokeStyle="rgba(255,200,0,0.4)";ic.lineWidth=1.5;
+        [[3,9,8,9],[3,14,7,14],[3,19,9,19]].forEach(([x1,y1,x2,y2])=>{
+            ic.beginPath();ic.moveTo(x1,y1);ic.lineTo(x2,y2);ic.stroke();
         });
+    })();
+    // İkon 2: Kalkan
+    (()=>{
+        const ic=document.getElementById("ic2").getContext("2d");
+        ic.clearRect(0,0,30,30);
+        ic.fillStyle="rgba(100,180,255,0.2)";
+        ic.strokeStyle="#64b4ff";ic.lineWidth=2;
+        ic.beginPath();
+        ic.moveTo(15,3);ic.lineTo(25,8);ic.lineTo(25,17);
+        ic.quadraticCurveTo(25,25,15,28);
+        ic.quadraticCurveTo(5,25,5,17);
+        ic.lineTo(5,8);ic.closePath();
+        ic.fill();ic.stroke();
+        ic.fillStyle="#64b4ff";ic.font="bold 11px sans-serif";ic.textAlign="center";
+        ic.fillText("B",15,20);
+    })();
+}
+drawIcons();
 
-        function project(x, depth) {
-            let ratio = 1 - (depth / maxDepth);
-            let scale = ratio * ratio; 
-            return { x: VPx + (x * scale), y: VPy + (canvas.height - VPy) * scale, scale: scale };
+// ─── GÜÇLER UI ───────────────────────────────────────────────
+function updatePowerUI(dt){
+    powers.forEach((p,i)=>{
+        if(p.cd>0)p.cd=Math.max(0,p.cd-dt);
+        if(p.active&&p.timer>0){
+            p.timer-=dt;
+            if(p.timer<=0){p.active=false;p.timer=0;}
         }
-
-        function spawnObstacle() {
-            let lanes = [-150, 0, 150]; 
-            obstacles.push({ x: lanes[Math.floor(Math.random() * lanes.length)], depth: -45, passed: false, type: Math.floor(Math.random() * 4) });
+        const btn=document.getElementById(`btn${i}`);
+        const bar=document.getElementById(`bar${i}`);
+        if(p.cd>0){
+            btn.className="powerBtn cooldown";
+            bar.style.width=((1-p.cd/POWER_MAXCD[i])*100)+"%";
+        }else if(p.active){
+            btn.className="powerBtn active";
+            bar.style.width=(p.timer/POWER_MAXTIME[i]*100)+"%";
+        }else{
+            btn.className="powerBtn ready";
+            bar.style.width="100%";
         }
+    });
+}
 
-        function update() {
-            if (!gameActive) return;
-            let diff = 1 + (Math.floor(score / 200) * 0.05);
-            
-            if (keys.ArrowLeft && player.x > -180) player.x -= player.speed;
-            if (keys.ArrowRight && player.x < 180) player.x += player.speed;
-            
-            roadOffset += 1.2 * diff; if (roadOffset > 10) roadOffset -= 10;
-            
-            frameCount++;
-            if (frameCount % Math.max(25, Math.floor(60 / diff)) === 0) spawnObstacle();
+function activatePower(i){
+    if(!gameActive)return;
+    const p=powers[i];
+    if(p.cd>0||p.active)return;
+    if(i===0){
+        monsterDepth=Math.min(90,monsterDepth+35);
+        p.cd=POWER_MAXCD[0];
+        playSfx(300,'sawtooth',0.1,0.3,600);
+        playSfx(600,'sine',0.3,0.15,1000);
+        screenShake=8;
+    }else if(i===1){
+        p.active=true;p.timer=POWER_MAXTIME[1];
+        boostActive=true;boostTimer=POWER_MAXTIME[1];
+        p.cd=POWER_MAXCD[1];
+        playSfx(400,'square',0.05,0.2,900);
+    }else if(i===2){
+        p.active=true;p.timer=POWER_MAXTIME[2];
+        shieldActive=true;shieldTimer=POWER_MAXTIME[2];
+        p.cd=POWER_MAXCD[2];
+        playSfx(600,'sine',0.4,0.1,300);
+    }
+}
 
-            // Sarsıntı süresini azalt
-            if (screenShake > 0) screenShake--;
+[0,1,2].forEach(i=>{
+    document.getElementById(`btn${i}`).addEventListener("pointerdown",(e)=>{
+        e.stopPropagation();activatePower(i);
+    });
+});
 
-            let timeElapsed = (Date.now() - gameStartTime) / 1000;
-            if (timeElapsed > 3 && Math.random() < 0.002) { 
-                phones.push({ x: Math.random() * (canvas.width - 130), y: 40 + Math.random() * (canvas.height - 300), w: 120, h: 220, clicks: 0, imgIndex: Math.floor(Math.random() * 10) });
-            }
+// ─── KLAVYE ──────────────────────────────────────────────────
+document.addEventListener("keydown",(e)=>{
+    if(!gameActive)return;
+    if(e.key==="1")activatePower(0);
+    if(e.key==="2")activatePower(1);
+    if(e.key==="3")activatePower(2);
+    if(e.key==="ArrowLeft"||e.key==="a"||e.key==="A"){
+        if(playerLane>0){playerLane--;playSfx(200,'sine',0.1,0.1);}e.preventDefault();
+    }else if(e.key==="ArrowRight"||e.key==="d"||e.key==="D"){
+        if(playerLane<2){playerLane++;playSfx(200,'sine',0.1,0.1);}e.preventDefault();
+    }
+});
 
-            for (let i = 0; i < obstacles.length; i++) {
-                let obs = obstacles[i]; obs.depth += 1.1 * diff; 
-                
-                if (Math.abs(obs.depth - player.depth) < 6 && Math.abs(obs.x - player.x) < 50 && !obs.passed) { 
-                    obs.passed = true; 
-                    monsterDepth -= 15; 
-                    // YENİ: CSS yerine Canvas içi sarsıntıyı tetikle
-                    screenShake = 12; 
-                }
-                if (obs.depth > player.depth + 5 && !obs.passed) { obs.passed = true; score += 10; document.getElementById("score").innerText = score; }
-                if (obs.depth >= maxDepth) { obstacles.splice(i, 1); i--; }
-            }
+// ─── DOKUNMATIK ──────────────────────────────────────────────
+let touchStartX=0;
+canvas.addEventListener("touchstart",(e)=>{
+    touchStartX=e.touches[0].clientX;
+    handleInput(e.touches[0].clientX,e.touches[0].clientY);
+},{passive:false});
+canvas.addEventListener("touchend",(e)=>{
+    const diff=e.changedTouches[0].clientX-touchStartX;
+    if(Math.abs(diff)>30){
+        if(diff>0&&playerLane<2)playerLane++;
+        else if(diff<0&&playerLane>0)playerLane--;
+        playSfx(200,'sine',0.1,0.1);
+    }
+});
+canvas.addEventListener("mousedown",(e)=>handleInput(e.clientX,e.clientY));
 
-            if (karakterSesi) {
-                try {
-                    let danger = 1 - (Math.max(0, monsterDepth - player.depth) / 75);
-                    
-                    let vol = 0.1 + (danger * 0.9);
-                    let rate = 1.0 + (danger * 1.2); 
-                    
-                    if (danger > 0.4) {
-                        if (Math.random() < danger * 0.5) { rate += (Math.random() * 0.8 - 0.4); }
-                        if (Math.random() < danger * 0.3) { vol *= (Math.random() * 0.5 + 0.3); }
-                    }
-
-                    karakterSesi.volume = Math.max(0, Math.min(1, vol));
-                    karakterSesi.playbackRate = Math.max(0.5, Math.min(3.0, rate));
-                } catch(e) {}
-            }
-
-            if (monsterDepth <= player.depth + 5) {
-                gameActive = false; if(karakterSesi) karakterSesi.pause();
-                setTimeout(() => alert("YAKALANDIN!\nSkor: " + score + "\nYeniden oynamak için sayfayı yenile."), 100);
-            }
+function handleInput(clientX,clientY){
+    const rect=canvas.getBoundingClientRect();
+    const scX=canvas.width/rect.width,scY=canvas.height/rect.height;
+    const x=(clientX-rect.left)*scX,y=(clientY-rect.top)*scY;
+    let cp=false;
+    for(let i=phones.length-1;i>=0;i--){
+        const p=phones[i];
+        if(x>p.x&&x<p.x+p.w&&y>p.y&&y<p.y+p.h){
+            p.clicks++;playSfx(600,'square',0.05,0.1);
+            if(p.clicks>=2){phones.splice(i,1);monsterDepth=Math.min(90,monsterDepth+10);playSfx(800,'sine',0.2,0.2);}
+            cp=true;break;
         }
+    }
+    if(!cp&&!gameActive)return;
+    if(!cp){
+        if(x<canvas.width/3&&playerLane>0)playerLane--;
+        else if(x>(canvas.width/3)*2&&playerLane<2)playerLane++;
+    }
+}
 
-        function draw() {
-            let danger = 1 - (Math.max(0, monsterDepth - player.depth) / 75);
-            ctx.fillStyle = `rgb(${Math.floor(danger * 80)}, 0, 0)`; 
-            // Arka planı her zaman tam çiz ki sarsıntıda kenarlar siyah boşluk kalmasın
-            ctx.fillRect(-20, -20, canvas.width + 40, canvas.height + 40); 
+// ─── RESET ───────────────────────────────────────────────────
+function resetGame(){
+    score=0;playerLane=1;player.x=0;monsterDepth=90;
+    obstacles=[];phones=[];frameCount=0;stepCycle=0;
+    screenShake=0;lastTimestamp=0;currentLevel=1;
+    breathPhase=false;breathTimer=0;nextBreathAt=BREATH_INTERVAL;
+    shieldActive=false;shieldTimer=0;boostActive=false;boostTimer=0;
+    powers=[{cd:0,active:false,timer:0},{cd:0,active:false,timer:0},{cd:0,active:false,timer:0}];
+    gameStartTime=Date.now();
+    document.getElementById("gameOverScreen").classList.add("hidden");
+    document.getElementById("startScreen").classList.add("hidden");
+    document.getElementById("levelBadge").innerText="SEVİYE 1";
+    breathOverlay.classList.remove("visible");
+    levelBanner.classList.remove("show");
+    if(karakterSesi){karakterSesi.currentTime=0;karakterSesi.play();}
+    gameActive=true;
+    requestAnimationFrame(gameLoop);
+}
 
-            ctx.save(); // Kameranın normal halini kaydet
-            
-            // Eğer sarsıntı varsa kamerayı rastgele titret
-            if (screenShake > 0) {
-                ctx.translate(Math.random() * 10 - 5, Math.random() * 10 - 5);
-            }
+// ─── PROJECT ─────────────────────────────────────────────────
+function project(x,depth){
+    const ratio=1-(depth/maxDepth);
+    const scale=ratio*ratio;
+    return{x:VPx+(x*scale),y:VPy+(canvas.height-VPy)*scale,scale};
+}
 
-            ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5; ctx.beginPath();
-            ctx.moveTo(0, VPy); ctx.lineTo(canvas.width, VPy); ctx.stroke();
+// ─── UPDATE ──────────────────────────────────────────────────
+function update(dt){
+    if(!gameActive)return;
+    const t=Math.min(dt,50)/16.67;
 
-            for (let d = roadOffset; d < maxDepth; d += 10) {
-                let p1 = project(-350, d); let p2 = project(350, d);
-                ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
-            }
+    if(boostActive){boostTimer-=dt;if(boostTimer<=0){boostActive=false;boostTimer=0;powers[1].active=false;}}
+    if(shieldActive){shieldTimer-=dt;if(shieldTimer<=0){shieldActive=false;shieldTimer=0;powers[2].active=false;}}
 
-            let mP = project(0, monsterDepth);
-            let mSize = 400 * mP.scale; let mHeight = 400 * mP.scale; 
-            let kX = mP.x - mSize/2; let kY = mP.y - mHeight * 0.8;
+    // NEFES AL
+    if(breathPhase){
+        breathTimer-=dt;
+        monsterDepth=Math.min(90,monsterDepth+0.012*t);
+        if(breathTimer<=0){breathPhase=false;breathOverlay.classList.remove("visible");}
+    }
 
-            if (danger > 0.05) {
-                ctx.fillStyle = "#000"; 
-                let pCount = Math.floor(25 * danger) + 10; 
-                
-                for(let p = 0; p < pCount; p++) {
-                    let offsetX = (Math.random() - 0.5) * (mSize * 1.5);
-                    let offsetY = (Math.random() - 0.5) * (mHeight * 1.2);
-                    let pX = kX + mSize/2 + offsetX;
-                    let pY = kY + mHeight/2 + offsetY;
-                    
-                    let pR = (Math.random() * 80 + 30) * mP.scale;
-                    if (pR > 120) pR = 120; 
-                    
-                    ctx.fillRect(pX - pR/2, pY - pR/2, pR, pR);
+    const boostMult=boostActive?2.2:1.0;
+    const diff=1+(Math.floor(score/500)*0.1);
+    const scoreMult=breathPhase?0.3:1.0;
+    score+=diff*t*scoreMult*boostMult;
+    const distM=Math.floor(score/10);
+    document.getElementById("distance").innerText=distM;
+
+    // SEVİYE ATLAMA — her 600m
+    const newLevel=Math.floor(distM/600)+1;
+    if(newLevel>currentLevel){
+        currentLevel=newLevel;
+        document.getElementById("levelBadge").innerText=`SEVİYE ${currentLevel}`;
+        levelBanner.innerText=`⚡ SEVİYE ${currentLevel} ⚡`;
+        levelBanner.classList.add("show");
+        setTimeout(()=>levelBanner.classList.remove("show"),2500);
+        playSfx(300,'square',0.05,0.2,600);
+        setTimeout(()=>playSfx(600,'sine',0.2,0.15,900),120);
+    }
+
+    // NEFES tetikle
+    if(!breathPhase&&score>=nextBreathAt){
+        breathPhase=true;breathTimer=BREATH_DURATION;
+        nextBreathAt=score+BREATH_INTERVAL;
+        breathOverlay.classList.add("visible");
+        playSfx(200,'sine',0.5,0.08,500);
+    }
+
+    stepCycle+=0.2*diff*t*(boostActive?1.8:1.0);
+    player.x+=(laneX[playerLane]-player.x)*Math.min(0.2*t,0.35);
+    roadOffset+=1.5*diff*t*(boostActive?2.2:1.0);
+    if(roadOffset>20)roadOffset-=20;
+    if(screenShake>0)screenShake-=t;
+
+    frameCount++;
+    if(!breathPhase&&frameCount%Math.max(20,Math.floor(50/diff))===0){
+        obstacles.push({x:laneX[Math.floor(Math.random()*3)],depth:-40,type:Math.floor(Math.random()*4),passed:false});
+    }
+    if(Date.now()-gameStartTime>3000&&Math.random()<0.003&&!breathPhase){
+        phones.push({x:Math.random()*250+20,y:Math.random()*200+50,w:120,h:220,clicks:0,imgIndex:Math.floor(Math.random()*10)});
+    }
+
+    // Monster hızı — seviyeyle artar
+    const levelBonus=(currentLevel-1)*0.004;
+    const monsterSpeed=(0.02+levelBonus)*diff;
+    if(!breathPhase){
+        monsterDepth-=Math.min(monsterSpeed,0.08)*t;
+    }
+
+    for(let i=0;i<obstacles.length;i++){
+        const obs=obstacles[i];
+        obs.depth+=1.2*diff*t*(boostActive?2.0:1.0);
+        if(!obs.passed){
+            if(Math.abs(obs.depth-player.depth)<6&&Math.abs(obs.x-player.x)<50){
+                obs.passed=true;
+                if(!shieldActive&&!boostActive){
+                    monsterDepth=Math.max(monsterDepth-8,player.depth+5);
+                    screenShake=15;
+                    playSfx(100,'sawtooth',0.3,0.3);
+                }else if(shieldActive){
+                    playSfx(400,'sine',0.1,0.1,200);
                 }
             }
-
-            if (karakterResmi.complete && karakterResmi.naturalWidth !== 0) {
-                let sX = (Math.random()*4-2)*danger; let sY = (Math.random()*4-2)*danger;
-                ctx.drawImage(karakterResmi, kX + sX, kY + sY, mSize, mHeight);
-            }
-
-            obstacles.forEach(obs => {
-                if (obs.depth < 0) {
-                    if (frameCount % 16 < 8) { 
-                        let wP = project(obs.x, 5); ctx.fillStyle = "red"; ctx.font = "bold 35px 'Courier New'"; ctx.textAlign = "center"; ctx.fillText("!", wP.x, canvas.height - 40);
-                    }
-                } else {
-                    let oP = project(obs.x, obs.depth);
-                    let oSize = 110 * oP.scale; 
-                    let img = engelResimleri[obs.type];
-                    if(img && img.complete && img.naturalWidth !== 0) {
-                        ctx.drawImage(img, oP.x - oSize/2, oP.y - oSize, oSize, oSize);
-                    } else {
-                        ctx.strokeStyle = "red"; ctx.strokeRect(oP.x - oSize/2, oP.y - oSize, oSize, oSize);
-                    }
-                }
-            });
-
-            let pP = project(player.x, player.depth);
-            let pW = 140 * pP.scale; let pH = 140 * pP.scale;
-            if (kosanResmi.complete && kosanResmi.naturalWidth !== 0) {
-                ctx.drawImage(kosanResmi, pP.x - pW/2, pP.y - pH + (15*pP.scale), pW, pH);
-            } else {
-                ctx.fillStyle = "#fff"; ctx.fillRect(pP.x - pW/2, pP.y - pH + (15*pP.scale), pW, pH);
-            }
-
-            phones.forEach(p => {
-                ctx.fillStyle = "#222"; ctx.fillRect(p.x, p.y, p.w, p.h);
-                ctx.strokeStyle = "#666"; ctx.lineWidth = 3; ctx.strokeRect(p.x, p.y, p.w, p.h);
-                ctx.fillStyle = "#111"; ctx.fillRect(p.x + p.w/2 - 15, p.y + 5, 30, 8);
-                
-                let sX = p.x + 5, sY = p.y + 20, sW = p.w - 10, sH = p.h - 25;
-                ctx.fillStyle = "#000"; ctx.fillRect(sX, sY, sW, sH);
-                
-                let currentImg = telefonResimleri[p.imgIndex];
-                if (currentImg && currentImg.complete && currentImg.naturalWidth !== 0) {
-                    ctx.drawImage(currentImg, sX, sY, sW, sH - 45);
-                } else {
-                    ctx.fillStyle = "#333"; ctx.fillRect(sX, sY, sW, sH - 45);
-                }
-                
-                let bY = sY + sH - 40;
-                let bCol = p.clicks === 1 ? "#ff0" : "#fff";
-                ctx.strokeStyle = bCol; ctx.strokeRect(sX + 5, bY, sW - 10, 35);
-                if (p.clicks === 1 && frameCount % 10 < 5) { ctx.fillStyle = bCol; ctx.fillRect(sX + 5, bY, sW - 10, 35); }
-                
-                ctx.fillStyle = (p.clicks === 1 && frameCount % 10 < 5) ? "#000" : bCol;
-                ctx.font = "bold 14px 'Courier New'"; ctx.textAlign = "center"; 
-                ctx.fillText(p.clicks === 0 ? "LIKE <3" : "1 DAHA!", sX + sW/2, bY + 22);
-            });
-
-            ctx.restore(); // Kamerayı eski düz haline getir
+            if(obs.depth>player.depth+5)obs.passed=true;
         }
+        if(obs.depth>=maxDepth){obstacles.splice(i,1);i--;}
+    }
 
-        function gameLoop() { update(); draw(); if(gameActive) requestAnimationFrame(gameLoop); }
-    </script>
+    const danger=Math.max(0,Math.min(1,1-((monsterDepth-player.depth)/75)));
+    const vp=danger>0.8?Math.random()*50:0;
+    vignette.style.boxShadow=`inset 0 0 ${danger*200+vp}px rgba(255,0,0,${danger})`;
+    if(karakterSesi){
+        karakterSesi.volume=Math.min(1,0.1+danger);
+        karakterSesi.playbackRate=1.0+(danger*1.5);
+    }
+
+    updatePowerUI(dt);
+    if(monsterDepth<=player.depth+2)endGame();
+}
+
+// ─── DRAW ────────────────────────────────────────────────────
+function draw(){
+    const danger=Math.max(0,Math.min(1,1-((monsterDepth-player.depth)/75)));
+    const bgRed=Math.floor(danger*60);
+    const breathTint=breathPhase?Math.floor((breathTimer/BREATH_DURATION)*20):0;
+    ctx.fillStyle=`rgb(${bgRed},${breathTint},${breathTint})`;
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    ctx.save();
+    let sX=0,sY=0;
+    if(screenShake>0){sX+=Math.random()*10-5;sY+=Math.random()*10-5;}
+    if(danger>0.6){const c=(danger-0.6)*2.5;sX+=(Math.random()-.5)*15*c;sY+=(Math.random()-.5)*15*c;}
+    if(sX||sY)ctx.translate(sX,sY);
+
+    // YOL ZEMİNİ
+    const rt=project(-400,0),rtr=project(400,0);
+    const rb=project(-400,maxDepth),rbr=project(400,maxDepth);
+    const gGrad=ctx.createLinearGradient(0,rt.y,0,rb.y);
+    gGrad.addColorStop(0,`rgb(${bgRed+20},${15+breathTint},${15+breathTint})`);
+    gGrad.addColorStop(1,`rgb(${bgRed+8},8,8)`);
+    ctx.fillStyle=gGrad;
+    ctx.beginPath();
+    ctx.moveTo(rt.x,rt.y);ctx.lineTo(rtr.x,rtr.y);
+    ctx.lineTo(rbr.x,rbr.y);ctx.lineTo(rb.x,rb.y);
+    ctx.closePath();ctx.fill();
+
+    // YATAY ÇİZGİLER
+    for(let d=roadOffset%10;d<maxDepth;d+=10){
+        const p1=project(-400,d),p2=project(400,d);
+        const alpha=0.08+(d/maxDepth)*0.18;
+        ctx.strokeStyle=`rgba(180,60,60,${alpha})`;
+        ctx.lineWidth=Math.max(0.5,(d/maxDepth)*2.5);
+        ctx.setLineDash([]);
+        ctx.beginPath();ctx.moveTo(p1.x,p1.y);ctx.lineTo(p2.x,p2.y);ctx.stroke();
+    }
+
+    // KENAR BANTLARI
+    [-400,400].forEach(ex=>{
+        const pS=project(ex,0),pE=project(ex,maxDepth);
+        const g=ctx.createLinearGradient(0,pS.y,0,pE.y);
+        g.addColorStop(0,'rgba(200,0,0,0.05)');g.addColorStop(1,'rgba(200,0,0,0.6)');
+        ctx.strokeStyle=g;ctx.lineWidth=4;ctx.setLineDash([]);
+        ctx.beginPath();ctx.moveTo(pS.x,pS.y);ctx.lineTo(pE.x,pE.y);ctx.stroke();
+    });
+
+    // ŞERİT ÇİZGİLERİ
+    ctx.setLineDash([8,12]);
+    [-75,75].forEach(lx=>{
+        const pS=project(lx,0),pE=project(lx,maxDepth);
+        const g=ctx.createLinearGradient(0,pS.y,0,pE.y);
+        g.addColorStop(0,'rgba(255,100,100,0.15)');g.addColorStop(1,'rgba(255,80,80,0.7)');
+        ctx.strokeStyle=g;ctx.lineWidth=1.5;
+        ctx.beginPath();ctx.moveTo(pS.x,pS.y);ctx.lineTo(pE.x,pE.y);ctx.stroke();
+    });
+
+    // MERKEZ
+    ctx.setLineDash([5,15]);
+    const cS=project(0,0),cE=project(0,maxDepth);
+    const cG=ctx.createLinearGradient(0,cS.y,0,cE.y);
+    cG.addColorStop(0,'rgba(255,50,50,0.05)');cG.addColorStop(1,'rgba(255,50,50,0.35)');
+    ctx.strokeStyle=cG;ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(cS.x,cS.y);ctx.lineTo(cE.x,cE.y);ctx.stroke();
+    ctx.setLineDash([]);
+
+    // CANAVAR
+    const mP=project(0,monsterDepth);
+    const mSize=450*mP.scale;
+    const mY=mP.y-mSize*0.8;
+    if(danger>0.1){
+        ctx.fillStyle="#000";
+        for(let i=0;i<20;i++){
+            const rX=mP.x+(Math.random()-.5)*mSize*2;
+            const rY=mP.y+(Math.random()-.5)*mSize;
+            const rS=Math.min(100,Math.random()*80*mP.scale);
+            ctx.fillRect(rX,rY,rS,rS);
+        }
+    }
+    if(karakterResmi.complete&&karakterResmi.naturalWidth!==0){
+        const rX=mP.x-mSize/2;
+        ctx.save();
+        ctx.drawImage(karakterResmi,rX,mY,mSize,mSize);
+        const fG=ctx.createLinearGradient(0,mY+mSize*0.45,0,mY+mSize*0.95);
+        fG.addColorStop(0,`rgba(${bgRed},0,0,0)`);
+        fG.addColorStop(0.5,`rgba(${bgRed},0,0,0.7)`);
+        fG.addColorStop(1,`rgba(${bgRed},0,0,1)`);
+        ctx.fillStyle=fG;
+        ctx.fillRect(rX-30,mY+mSize*0.45,mSize+60,mSize*0.55+10);
+        const eL=ctx.createLinearGradient(rX-5,0,rX+18,0);
+        eL.addColorStop(0,`rgba(${bgRed},0,0,1)`);eL.addColorStop(1,`rgba(${bgRed},0,0,0)`);
+        ctx.fillStyle=eL;ctx.fillRect(rX-5,mY,23,mSize);
+        const eR=ctx.createLinearGradient(rX+mSize-18,0,rX+mSize+5,0);
+        eR.addColorStop(0,`rgba(${bgRed},0,0,0)`);eR.addColorStop(1,`rgba(${bgRed},0,0,1)`);
+        ctx.fillStyle=eR;ctx.fillRect(rX+mSize-18,mY,23,mSize);
+        ctx.restore();
+    }
+
+    // GLİTCH
+    if(danger>0.65){
+        const gi=(danger-0.65)/0.35;
+        if(Math.random()<gi*0.7){
+            ctx.fillStyle=Math.random()>0.5?`rgba(255,0,0,${gi*0.4})`:`rgba(255,255,255,${gi*0.2})`;
+            ctx.fillRect(-20,Math.random()*canvas.height,canvas.width+40,Math.random()*30+5);
+        }
+    }
+
+    // ENGELLER
+    obstacles.forEach(obs=>{
+        const oP=project(obs.x,obs.depth);
+        const oSize=110*oP.scale;
+        const img=engelResimleri[obs.type];
+        if(img&&img.complete&&img.naturalWidth!==0)ctx.drawImage(img,oP.x-oSize/2,oP.y-oSize,oSize,oSize);
+        else{ctx.fillStyle="red";ctx.fillRect(oP.x-oSize/2,oP.y-oSize,oSize,oSize);}
+    });
+
+    // OYUNCU
+    const pP=project(player.x,player.depth);
+    const pW=150*pP.scale,pH=150*pP.scale;
+
+    // KALKAN
+    if(shieldActive){
+        const sA=0.3+Math.sin(Date.now()/150)*0.12;
+        ctx.save();
+        ctx.globalAlpha=sA;
+        ctx.strokeStyle="#64b4ff";ctx.lineWidth=3*pP.scale;
+        ctx.beginPath();
+        ctx.ellipse(pP.x,pP.y-pH*0.4,pW*0.65,pH*0.55,0,0,Math.PI*2);
+        ctx.stroke();
+        ctx.globalAlpha=sA*0.25;ctx.fillStyle="#64b4ff";ctx.fill();
+        ctx.restore();
+    }
+
+    // BOOST alevi
+    if(boostActive){
+        ctx.save();
+        const fH=pH*0.55*(0.7+Math.random()*0.3);
+        const fG=ctx.createLinearGradient(pP.x,pP.y,pP.x,pP.y+fH);
+        fG.addColorStop(0,"rgba(255,210,0,0.9)");
+        fG.addColorStop(0.5,"rgba(255,80,0,0.6)");
+        fG.addColorStop(1,"rgba(255,0,0,0)");
+        ctx.fillStyle=fG;
+        ctx.beginPath();ctx.ellipse(pP.x,pP.y+fH*0.3,pW*0.25,fH*0.5,0,0,Math.PI*2);ctx.fill();
+        ctx.restore();
+    }
+
+    if(kosanResmi.complete&&kosanResmi.naturalWidth!==0){
+        ctx.save();
+        ctx.translate(pP.x,pP.y);
+        if(Math.floor(stepCycle)%2===0)ctx.scale(-1,1);
+        ctx.drawImage(kosanResmi,-pW/2,-pH+(15*pP.scale),pW,pH);
+        ctx.restore();
+    }
+
+    // TELEFONLAR
+    phones.forEach(p=>{
+        let sc=1.0;
+        if(p.clicks===1&&Math.floor(frameCount/5)%2===0)sc=0.95;
+        ctx.save();
+        ctx.translate(p.x+p.w/2,p.y+p.h/2);ctx.scale(sc,sc);
+        ctx.fillStyle="#1c1c1e";
+        ctx.beginPath();ctx.roundRect(-p.w/2,-p.h/2,p.w,p.h,20);ctx.fill();
+        ctx.strokeStyle="#3a3a3c";ctx.lineWidth=3;ctx.stroke();
+        ctx.fillStyle="#000";
+        ctx.beginPath();ctx.roundRect(-p.w/6,-p.h/2+5,p.w/3,10,5);ctx.fill();
+        const nH=p.h*0.25;
+        ctx.fillStyle="rgba(255,255,255,0.1)";
+        ctx.fillRect(-p.w/2+5,-p.h/2+25,p.w-10,nH);
+        ctx.fillStyle="#fff";ctx.font="bold 14px sans-serif";ctx.textAlign="left";
+        ctx.fillText("\uf8ff butik_merve",-p.w/2+15,-p.h/2+45);
+        ctx.fillStyle="#ccc";ctx.font="12px sans-serif";
+        ctx.fillText("Hemen beğen \u2764\uFE0F",-p.w/2+15,-p.h/2+65);
+        const sY=-p.h/2+25+nH+5,sH=p.h*0.65;
+        ctx.fillStyle="#fff";ctx.fillRect(-p.w/2+5,sY,p.w-10,sH);
+        ctx.fillStyle="#ccc";ctx.beginPath();ctx.arc(-p.w/2+20,sY+15,10,0,Math.PI*2);ctx.fill();
+        ctx.fillStyle="#000";ctx.font="bold 12px sans-serif";ctx.textAlign="left";
+        ctx.fillText("butik_merve",-p.w/2+35,sY+20);
+        const img=telefonResimleri[p.imgIndex];
+        if(img&&img.complete&&img.naturalWidth!==0)ctx.drawImage(img,-p.w/2+5,sY+30,p.w-10,sH-70);
+        else{ctx.fillStyle="#efefef";ctx.fillRect(-p.w/2+5,sY+30,p.w-10,sH-70);}
+        const iY=sY+sH-30;
+        ctx.fillStyle=(p.clicks===1&&Math.floor(frameCount/5)%2===0)?"#555":(p.clicks===1?"#333":"red");
+        ctx.font="24px sans-serif";ctx.textAlign="center";
+        ctx.fillText("\u2764\uFE0F",-p.w/3,iY);
+        ctx.fillStyle="#8e8e93";ctx.font="20px sans-serif";
+        ctx.fillText("\uD83D\uDCAC",0,iY);ctx.fillText("\uD83D\uDCE4",p.w/3,iY);
+        ctx.restore();
+    });
+
+    ctx.restore();
+}
+
+// ─── END GAME ────────────────────────────────────────────────
+function endGame(){
+    gameActive=false;
+    if(karakterSesi)karakterSesi.pause();
+    playSfx(50,'sawtooth',1,0.5);
+    breathOverlay.classList.remove("visible");
+    const finalDist=Math.floor(score/10);
+    if(finalDist>highScore){
+        highScore=finalDist;
+        localStorage.setItem('bRrand_highScore',highScore);
+        document.getElementById("highScoreText").innerText=highScore;
+    }
+    document.getElementById("finalDistance").innerText=finalDist;
+    document.getElementById("bestDistance").innerText=highScore;
+    document.getElementById("goLevel").innerText=`SEVİYE ${currentLevel}'de yakalandın`;
+    document.getElementById("gameOverScreen").classList.remove("hidden");
+    startScreenAnim("goCanvas");
+}
+
+// ─── GAME LOOP ───────────────────────────────────────────────
+function gameLoop(ts){
+    if(!gameActive)return;
+    const dt=lastTimestamp?(ts-lastTimestamp):16.67;
+    lastTimestamp=ts;
+    update(dt);draw();
+    requestAnimationFrame(gameLoop);
+}
+
+// ─── BAŞLANGIÇ / GAME OVER ANİMASYON ────────────────────────
+function startScreenAnim(canvasId){
+    const sc=document.getElementById(canvasId);
+    if(!sc)return;
+    if(sc._raf){cancelAnimationFrame(sc._raf);sc._raf=null;}
+    const par=sc.parentElement;
+    function rsz(){sc.width=par.offsetWidth||window.innerWidth;sc.height=par.offsetHeight||window.innerHeight;}
+    rsz();
+    const sctx=sc.getContext("2d");
+    const ghosts=Array.from({length:6},(_,i)=>({
+        x:-80-i*180,
+        y:sc.height*(0.25+Math.random()*0.5),
+        speed:0.6+Math.random()*0.7,
+        size:50+Math.random()*50,
+        alpha:0.06+Math.random()*0.1,
+        flip:Math.random()<0.5,
+        step:Math.random()*10
+    }));
+    function frame(){
+        sctx.clearRect(0,0,sc.width,sc.height);
+        for(let gy=0;gy<sc.height;gy+=4){
+            sctx.fillStyle="rgba(255,0,0,0.012)";
+            sctx.fillRect(0,gy,sc.width,1);
+        }
+        ghosts.forEach(g=>{
+            g.x+=g.speed;g.step+=0.12;
+            if(g.x>sc.width+120)g.x=-130;
+            if(karakterResmi.complete&&karakterResmi.naturalWidth!==0){
+                sctx.save();
+                sctx.globalAlpha=g.alpha;
+                sctx.translate(g.x,g.y+Math.sin(g.step)*6);
+                if(g.flip)sctx.scale(-1,1);
+                sctx.drawImage(karakterResmi,-g.size/2,-g.size/2,g.size,g.size);
+                sctx.restore();
+            }
+        });
+        sc._raf=requestAnimationFrame(frame);
+    }
+    frame();
+}
+
+// ─── BAŞLANGIÇ ───────────────────────────────────────────────
+startScreenAnim("startCanvas");
+document.getElementById("startBtn").addEventListener("click",()=>{
+    const sc=document.getElementById("startCanvas");
+    if(sc&&sc._raf){cancelAnimationFrame(sc._raf);sc._raf=null;}
+    resetGame();
+});
+document.getElementById("restartBtn").addEventListener("click",()=>{
+    const sc=document.getElementById("goCanvas");
+    if(sc&&sc._raf){cancelAnimationFrame(sc._raf);sc._raf=null;}
+    resetGame();
+});
+
+// ─── RESIZE ──────────────────────────────────────────────────
+function resize(){
+    const scale=Math.min(window.innerWidth/400,window.innerHeight/600);
+    canvas.style.width=(400*scale)+"px";
+    canvas.style.height=(600*scale)+"px";
+    const canvasRect=canvas.getBoundingClientRect();
+    const pp=document.getElementById("powerPanel");
+    const gap=Math.max(4,(window.innerWidth/2-canvasRect.width/2)-50);
+    pp.style.right=gap+"px";
+    document.getElementById("ui").style.width=(400*scale)+"px";
+}
+window.onresize=resize;resize();
+</script>
 </body>
 </html>
