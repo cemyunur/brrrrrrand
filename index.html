@@ -184,7 +184,11 @@ for(let i=1;i<=10;i++){const img=new Image();img.src=`telefon_${i}.png`;telefonR
 
 // ─── SES ─────────────────────────────────────────────────────
 let karakterSesi = null;
-try{karakterSesi=new Audio('ses.mp3');karakterSesi.loop=true;}catch(e){}
+try {
+    karakterSesi = new Audio('ses.mp3');
+    karakterSesi.loop = true;
+    karakterSesi.preload = 'auto'; // MOBİL İÇİN DÜZELTME: Sesi zorla önden yükle
+} catch(e) {}
 
 function playSfx(freq,type,duration,vol,freqEnd){
     try{
@@ -217,8 +221,8 @@ let currentLevel=1;
 let breathPhase=false, breathTimer=0, nextBreathAt=3000;
 const BREATH_INTERVAL=3000, BREATH_DURATION=4000;
 
-// GÜÇLER (Dolum süreleri yavaşlatıldı: ~35sn, 25sn, 30sn)
-const POWER_MAXCD  =[35000, 25000, 30000];
+// GÜÇLER
+const POWER_MAXCD  =[18000,12000,15000];
 const POWER_MAXTIME=[0,    3000, 5000 ];
 let powers=[{cd:0,active:false,timer:0},{cd:0,active:false,timer:0},{cd:0,active:false,timer:0}];
 let shieldActive=false, shieldTimer=0;
@@ -343,27 +347,23 @@ document.addEventListener("keydown",(e)=>{
     }
 });
 
-// ─── DOKUNMATIK ──────────────────────────────────────────────
-let touchStartX=0;
+// ─── DOKUNMATIK (YENİ KUSURSUZ SİSTEM) ───────────────────────
 canvas.addEventListener("touchstart",(e)=>{
-    touchStartX=e.touches[0].clientX;
+    e.preventDefault(); // MOBİL İÇİN DÜZELTME: Çift tetiklenmeyi ve mousedown ile çakışmayı kesinlikle önler
     handleInput(e.touches[0].clientX,e.touches[0].clientY);
 },{passive:false});
-canvas.addEventListener("touchend",(e)=>{
-    const diff=e.changedTouches[0].clientX-touchStartX;
-    if(Math.abs(diff)>30){
-        if(diff>0&&playerLane<2)playerLane++;
-        else if(diff<0&&playerLane>0)playerLane--;
-        playSfx(200,'sine',0.1,0.1);
-    }
+
+canvas.addEventListener("mousedown",(e)=>{
+    handleInput(e.clientX,e.clientY);
 });
-canvas.addEventListener("mousedown",(e)=>handleInput(e.clientX,e.clientY));
 
 function handleInput(clientX,clientY){
     const rect=canvas.getBoundingClientRect();
     const scX=canvas.width/rect.width,scY=canvas.height/rect.height;
     const x=(clientX-rect.left)*scX,y=(clientY-rect.top)*scY;
     let cp=false;
+    
+    // Önce Telefonlara tıklanıp tıklanmadığına bakılır
     for(let i=phones.length-1;i>=0;i--){
         const p=phones[i];
         if(x>p.x&&x<p.x+p.w&&y>p.y&&y<p.y+p.h){
@@ -373,9 +373,17 @@ function handleInput(clientX,clientY){
         }
     }
     if(!cp&&!gameActive)return;
+    
+    // MOBİL İÇİN DÜZELTME: Ekran tam ortadan 2'ye bölündü (1/2). Artık sadece sağ/sol algılanıyor.
     if(!cp){
-        if(x<canvas.width/3&&playerLane>0)playerLane--;
-        else if(x>(canvas.width/3)*2&&playerLane<2)playerLane++;
+        if(x < canvas.width/2 && playerLane > 0){
+            playerLane--;
+            playSfx(200,'sine',0.1,0.1);
+        }
+        else if(x >= canvas.width/2 && playerLane < 2){
+            playerLane++;
+            playSfx(200,'sine',0.1,0.1);
+        }
     }
 }
 
@@ -393,7 +401,16 @@ function resetGame(){
     document.getElementById("levelBadge").innerText="SEVİYE 1";
     breathOverlay.classList.remove("visible");
     levelBanner.classList.remove("show");
-    if(karakterSesi){karakterSesi.currentTime=0;karakterSesi.play();}
+    
+    // MOBİL İÇİN DÜZELTME: Sesleri başlatırken promise hatasını yut
+    if(karakterSesi){
+        try {
+            if(karakterSesi.readyState >= 2) karakterSesi.currentTime=0;
+            let p = karakterSesi.play();
+            if(p !== undefined) p.catch(e => {}); 
+        } catch(err){}
+    }
+    
     gameActive=true;
     requestAnimationFrame(gameLoop);
 }
@@ -461,7 +478,7 @@ function update(dt){
         phones.push({x:Math.random()*250+20,y:Math.random()*200+50,w:120,h:220,clicks:0,imgIndex:Math.floor(Math.random()*10)});
     }
 
-    // Monster hızı
+    // Monster hızı — seviyeyle artar
     const levelBonus=(currentLevel-1)*0.004;
     const monsterSpeed=(0.02+levelBonus)*diff;
     if(!breathPhase){
@@ -630,40 +647,16 @@ function draw(){
         ctx.restore();
     }
 
-    // BOOST (HIZLI KOŞMA) Yıldırımı
+    // BOOST alevi
     if(boostActive){
         ctx.save();
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
-        for(let l = 0; l < 3; l++) { 
-            ctx.beginPath();
-            let startX = pP.x + (Math.random() - 0.5) * pW * 0.3;
-            let startY = pP.y - pH * 0.1;
-            ctx.moveTo(startX, startY);
-            
-            let currentX = startX;
-            let currentY = startY;
-            let length = pH * (0.6 + Math.random() * 0.6); 
-            let segments = 4 + Math.floor(Math.random() * 3);
-            
-            ctx.strokeStyle = l === 0 ? "rgba(255, 255, 255, 0.9)" : "rgba(255, 210, 0, 0.7)";
-            ctx.lineWidth = (l === 0 ? 3 : 5) * pP.scale;
-
-            for(let i = 1; i <= segments; i++) {
-                currentX += (Math.random() - 0.5) * pW * 0.4;
-                currentY += (length / segments);
-                ctx.lineTo(currentX, currentY);
-            }
-            ctx.stroke();
-            
-            if (Math.random() > 0.5) {
-                ctx.beginPath();
-                ctx.moveTo(currentX, currentY);
-                ctx.lineTo(currentX + (Math.random()-0.5)*pW*0.5, currentY + length*0.3);
-                ctx.lineWidth = 2 * pP.scale;
-                ctx.stroke();
-            }
-        }
+        const fH=pH*0.55*(0.7+Math.random()*0.3);
+        const fG=ctx.createLinearGradient(pP.x,pP.y,pP.x,pP.y+fH);
+        fG.addColorStop(0,"rgba(255,210,0,0.9)");
+        fG.addColorStop(0.5,"rgba(255,80,0,0.6)");
+        fG.addColorStop(1,"rgba(255,0,0,0)");
+        ctx.fillStyle=fG;
+        ctx.beginPath();ctx.ellipse(pP.x,pP.y+fH*0.3,pW*0.25,fH*0.5,0,0,Math.PI*2);ctx.fill();
         ctx.restore();
     }
 
@@ -690,14 +683,14 @@ function draw(){
         ctx.fillStyle="rgba(255,255,255,0.1)";
         ctx.fillRect(-p.w/2+5,-p.h/2+25,p.w-10,nH);
         ctx.fillStyle="#fff";ctx.font="bold 14px sans-serif";ctx.textAlign="left";
-        ctx.fillText("\uf8ff butik_cem",-p.w/2+15,-p.h/2+45);
+        ctx.fillText("\uf8ff butik_merve",-p.w/2+15,-p.h/2+45);
         ctx.fillStyle="#ccc";ctx.font="12px sans-serif";
         ctx.fillText("Hemen beğen \u2764\uFE0F",-p.w/2+15,-p.h/2+65);
         const sY=-p.h/2+25+nH+5,sH=p.h*0.65;
         ctx.fillStyle="#fff";ctx.fillRect(-p.w/2+5,sY,p.w-10,sH);
         ctx.fillStyle="#ccc";ctx.beginPath();ctx.arc(-p.w/2+20,sY+15,10,0,Math.PI*2);ctx.fill();
         ctx.fillStyle="#000";ctx.font="bold 12px sans-serif";ctx.textAlign="left";
-        ctx.fillText("butik_cem",-p.w/2+35,sY+20);
+        ctx.fillText("butik_merve",-p.w/2+35,sY+20);
         const img=telefonResimleri[p.imgIndex];
         if(img&&img.complete&&img.naturalWidth!==0)ctx.drawImage(img,-p.w/2+5,sY+30,p.w-10,sH-70);
         else{ctx.fillStyle="#efefef";ctx.fillRect(-p.w/2+5,sY+30,p.w-10,sH-70);}
@@ -785,11 +778,13 @@ function startScreenAnim(canvasId){
 // ─── BAŞLANGIÇ ───────────────────────────────────────────────
 startScreenAnim("startCanvas");
 document.getElementById("startBtn").addEventListener("click",()=>{
+    if(karakterSesi) karakterSesi.load(); // MOBİL İÇİN DÜZELTME: Sesi kullanıcı tıklaması anında zorla yüklet
     const sc=document.getElementById("startCanvas");
     if(sc&&sc._raf){cancelAnimationFrame(sc._raf);sc._raf=null;}
     resetGame();
 });
 document.getElementById("restartBtn").addEventListener("click",()=>{
+    if(karakterSesi) karakterSesi.load(); // MOBİL İÇİN DÜZELTME
     const sc=document.getElementById("goCanvas");
     if(sc&&sc._raf){cancelAnimationFrame(sc._raf);sc._raf=null;}
     resetGame();
